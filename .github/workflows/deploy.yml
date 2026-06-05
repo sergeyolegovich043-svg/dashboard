@@ -108,7 +108,7 @@ jobs:
           User=site-dashboard
           Group=site-dashboard
           WorkingDirectory=/opt/site-dashboard
-          Environment=DASHBOARD_HOST=0.0.0.0
+          Environment=DASHBOARD_HOST=127.0.0.1
           Environment=DASHBOARD_PORT=8000
           Environment=DASHBOARD_DB=/var/lib/site-dashboard/monitor.db
           Environment=CHECK_INTERVAL_SECONDS=600

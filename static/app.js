@@ -2,6 +2,7 @@ const state = {
   csrfToken: null,
   sites: [],
   refreshTimer: null,
+  checkPollTimer: null,
   autoRefreshMs: 30000,
 };
 
@@ -18,6 +19,7 @@ const els = {
   refreshAllButton: document.querySelector("#refreshAllButton"),
   refreshStatus: document.querySelector("#refreshStatus"),
   checkPulse: document.querySelector("#checkPulse"),
+  loadingBar: document.querySelector("#loadingBar"),
   tableBody: document.querySelector("#sitesTableBody"),
   emptyState: document.querySelector("#emptyState"),
   totalCount: document.querySelector("#totalCount"),
@@ -95,6 +97,24 @@ function stopAutoRefresh() {
     window.clearInterval(state.refreshTimer);
     state.refreshTimer = null;
   }
+  stopCheckPolling();
+}
+
+function stopCheckPolling() {
+  if (state.checkPollTimer) {
+    window.clearTimeout(state.checkPollTimer);
+    state.checkPollTimer = null;
+  }
+}
+
+function scheduleCheckPolling() {
+  if (state.checkPollTimer) {
+    return;
+  }
+  state.checkPollTimer = window.setTimeout(async () => {
+    state.checkPollTimer = null;
+    await loadSites(false);
+  }, 3000);
 }
 
 function formatDateTime(value) {
@@ -234,6 +254,7 @@ function renderSummary() {
 function setRefreshStatus(text, checking = false) {
   els.refreshStatus.textContent = text;
   els.checkPulse.classList.toggle("is-active", checking);
+  els.loadingBar.classList.toggle("is-active", checking);
 }
 
 async function loadSites(showStatus = true) {
@@ -245,10 +266,16 @@ async function loadSites(showStatus = true) {
     state.sites = data.sites;
     renderSites();
     setRefreshStatus(data.checking ? "Проверка выполняется" : `Обновлено ${formatDateTime(data.server_time)}`, data.checking);
+    if (data.checking) {
+      scheduleCheckPolling();
+    } else {
+      stopCheckPolling();
+    }
   } catch (error) {
     if (showStatus) {
       setRefreshStatus(error.message, false);
     }
+    stopCheckPolling();
   }
 }
 
@@ -358,8 +385,10 @@ async function handleRefreshAll() {
   try {
     await api("/api/sites/check-all", { method: "POST" });
     window.setTimeout(() => loadSites(false), 1200);
+    scheduleCheckPolling();
   } catch (error) {
     setRefreshStatus(error.message, false);
+    stopCheckPolling();
   } finally {
     window.setTimeout(() => {
       els.refreshAllButton.disabled = false;
@@ -401,6 +430,7 @@ async function handleTableClick(event) {
   if (button.dataset.action === "check") {
     button.disabled = true;
     button.textContent = "Проверка";
+    setRefreshStatus("Проверка сайта", true);
     try {
       const data = await api(`/api/sites/${siteId}/check`, { method: "POST" });
       state.sites = state.sites.map((item) => (item.id === siteId ? data.site : item));
@@ -408,6 +438,11 @@ async function handleTableClick(event) {
       setRefreshStatus(`Проверено ${formatDateTime(data.site.last_checked_at)}`, false);
     } catch (error) {
       setRefreshStatus(error.message, false);
+    } finally {
+      if (button.isConnected) {
+        button.disabled = false;
+        button.textContent = "Проверить сейчас";
+      }
     }
   }
 }

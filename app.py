@@ -472,14 +472,11 @@ def check_http(url: str) -> dict[str, Any]:
 
 def check_ssl(url: str) -> dict[str, Any]:
     parsed = urllib.parse.urlparse(url)
-    if parsed.scheme != "https":
-        return {"ssl_status": "missing", "ssl_expires_at": None, "ssl_days_remaining": None}
-
     hostname = parsed.hostname
     if not hostname:
         return {"ssl_status": "missing", "ssl_expires_at": None, "ssl_days_remaining": None}
 
-    port = parsed.port or 443
+    port = parsed.port if parsed.scheme == "https" and parsed.port else 443
     idna_hostname = hostname.encode("idna").decode("ascii")
     context = ssl._create_unverified_context()
 

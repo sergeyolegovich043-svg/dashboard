@@ -1,0 +1,99 @@
+name: Deploy dashboard
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install SSH tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y sshpass
+
+      - name: Package application
+        run: |
+          tar \
+            --exclude='.git' \
+            --exclude='__pycache__' \
+            --exclude='*.pyc' \
+            --exclude='monitor.db*' \
+            -czf /tmp/site-dashboard.tar.gz \
+            app.py README.md static .gitignore
+
+      - name: Deploy over SSH
+        env:
+          SSHPASS: ${{ secrets.DEPLOY_PASSWORD }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${DEPLOY_HOST}" ] || [ -z "${DEPLOY_USER}" ] || [ -z "${SSHPASS}" ]; then
+            echo "DEPLOY_HOST, DEPLOY_USER and DEPLOY_PASSWORD secrets are required" >&2
+            exit 1
+          fi
+
+          PORT="${DEPLOY_PORT:-22}"
+          SSH_OPTS="-6 -p ${PORT} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+
+          sshpass -e ssh ${SSH_OPTS} "${DEPLOY_USER}@${DEPLOY_HOST}" 'mkdir -p /opt/site-dashboard'
+          sshpass -e scp -6 -P "${PORT}" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+            /tmp/site-dashboard.tar.gz "${DEPLOY_USER}@[${DEPLOY_HOST}]:/tmp/site-dashboard.tar.gz"
+
+          sshpass -e ssh ${SSH_OPTS} "${DEPLOY_USER}@${DEPLOY_HOST}" 'bash -s' <<'REMOTE'
+          set -euo pipefail
+
+          mkdir -p /opt/site-dashboard /var/lib/site-dashboard
+          tar -xzf /tmp/site-dashboard.tar.gz -C /opt/site-dashboard
+          rm -f /tmp/site-dashboard.tar.gz
+
+          if ! command -v python3 >/dev/null 2>&1; then
+            apt-get update
+            apt-get install -y python3
+          fi
+
+          cat >/etc/systemd/system/site-dashboard.service <<'UNIT'
+          [Unit]
+          Description=Site availability and SSL dashboard
+          After=network-online.target
+          Wants=network-online.target
+
+          [Service]
+          Type=simple
+          WorkingDirectory=/opt/site-dashboard
+          Environment=DASHBOARD_HOST=0.0.0.0
+          Environment=DASHBOARD_PORT=8000
+          Environment=DASHBOARD_DB=/var/lib/site-dashboard/monitor.db
+          Environment=CHECK_INTERVAL_SECONDS=600
+          ExecStart=/usr/bin/python3 /opt/site-dashboard/app.py
+          Restart=always
+          RestartSec=5
+          StateDirectory=site-dashboard
+          NoNewPrivileges=true
+          PrivateTmp=true
+
+          [Install]
+          WantedBy=multi-user.target
+          UNIT
+
+          systemctl daemon-reload
+          systemctl enable site-dashboard.service
+          systemctl restart site-dashboard.service
+          sleep 2
+          systemctl --no-pager --full status site-dashboard.service
+          REMOTE

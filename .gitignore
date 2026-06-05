@@ -1,0 +1,5 @@
+__pycache__/
+*.pyc
+monitor.db
+monitor.db-*
+.env

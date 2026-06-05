@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Мониторинг сайтов</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="auth-view" id="authView" aria-labelledby="loginTitle">
+        <form class="login-panel" id="loginForm" autocomplete="on">
+          <div class="brand-mark">SM</div>
+          <h1 id="loginTitle">Мониторинг сайтов</h1>
+          <label>
+            Логин
+            <input id="username" name="username" autocomplete="username" required />
+          </label>
+          <label>
+            Пароль
+            <input id="password" name="password" type="password" autocomplete="current-password" required />
+          </label>
+          <p class="form-error" id="loginError" role="alert"></p>
+          <button class="button button-primary" type="submit">Войти</button>
+        </form>
+      </section>
+
+      <section class="dashboard-view is-hidden" id="dashboardView" aria-labelledby="dashboardTitle">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Административная панель</p>
+            <h1 id="dashboardTitle">Доступность и SSL</h1>
+          </div>
+          <div class="topbar-actions">
+            <button class="button button-ghost" id="passwordButton" type="button">Сменить пароль</button>
+            <button class="button button-ghost" id="logoutButton" type="button">Выйти</button>
+          </div>
+        </header>
+
+        <section class="summary-grid" aria-label="Сводка">
+          <article class="summary-card">
+            <span>Всего</span>
+            <strong id="totalCount">0</strong>
+          </article>
+          <article class="summary-card summary-ok">
+            <span>Доступны</span>
+            <strong id="availableCount">0</strong>
+          </article>
+          <article class="summary-card summary-danger">
+            <span>Недоступны</span>
+            <strong id="downCount">0</strong>
+          </article>
+          <article class="summary-card summary-warn">
+            <span>SSL скоро</span>
+            <strong id="sslWarnCount">0</strong>
+          </article>
+          <article class="summary-card summary-danger">
+            <span>SSL просрочен</span>
+            <strong id="sslExpiredCount">0</strong>
+          </article>
+        </section>
+
+        <section class="toolbar" aria-label="Действия">
+          <div class="toolbar-status">
+            <span class="pulse" id="checkPulse"></span>
+            <span id="refreshStatus">Готово</span>
+          </div>
+          <div class="toolbar-actions">
+            <button class="button button-secondary" id="refreshAllButton" type="button">Обновить все</button>
+            <button class="button button-primary" id="addSiteButton" type="button">Добавить сайт</button>
+          </div>
+        </section>
+
+        <section class="table-section">
+          <div class="table-scroll">
+            <table class="sites-table">
+              <thead>
+                <tr>
+                  <th>Название</th>
+                  <th>URL</th>
+                  <th>Доступность</th>
+                  <th>HTTP</th>
+                  <th>Последняя проверка</th>
+                  <th>SSL</th>
+                  <th>Окончание SSL</th>
+                  <th>Дней SSL</th>
+                  <th>Хостинг/домен</th>
+                  <th>Дней</th>
+                  <th>Действия</th>
+                </tr>
+              </thead>
+              <tbody id="sitesTableBody"></tbody>
+            </table>
+          </div>
+          <div class="empty-state is-hidden" id="emptyState">Сайты не добавлены</div>
+        </section>
+      </section>
+    </main>
+
+    <dialog class="modal" id="siteModal">
+      <form class="modal-panel" id="siteForm" method="dialog">
+        <header class="modal-header">
+          <h2 id="siteModalTitle">Добавить сайт</h2>
+          <button class="icon-button" type="button" data-close-modal aria-label="Закрыть">×</button>
+        </header>
+        <input type="hidden" id="siteId" />
+        <label>
+          Название сайта
+          <input id="siteName" maxlength="160" />
+        </label>
+        <label>
+          URL сайта
+          <input id="siteUrl" required placeholder="https://example.com/" />
+        </label>
+        <label>
+          Дата окончания хостинга/домена
+          <input id="domainExpiresAt" type="date" />
+        </label>
+        <p class="form-error" id="siteFormError" role="alert"></p>
+        <footer class="modal-actions">
+          <button class="button button-ghost" type="button" data-close-modal>Отмена</button>
+          <button class="button button-primary" type="submit">Сохранить</button>
+        </footer>
+      </form>
+    </dialog>
+
+    <dialog class="modal" id="passwordModal">
+      <form class="modal-panel" id="passwordForm" method="dialog">
+        <header class="modal-header">
+          <h2>Сменить пароль</h2>
+          <button class="icon-button" type="button" data-close-modal aria-label="Закрыть">×</button>
+        </header>
+        <label>
+          Текущий пароль
+          <input id="currentPassword" type="password" autocomplete="current-password" required />
+        </label>
+        <label>
+          Новый пароль
+          <input id="newPassword" type="password" autocomplete="new-password" minlength="8" required />
+        </label>
+        <p class="form-error" id="passwordFormError" role="alert"></p>
+        <footer class="modal-actions">
+          <button class="button button-ghost" type="button" data-close-modal>Отмена</button>
+          <button class="button button-primary" type="submit">Обновить</button>
+        </footer>
+      </form>
+    </dialog>
+
+    <script src="/static/app.js" defer></script>
+  </body>
+</html>

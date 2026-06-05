@@ -40,6 +40,7 @@ jobs:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+          DEPLOY_SSH_FAMILY: ${{ secrets.DEPLOY_SSH_FAMILY }}
         run: |
           set -euo pipefail
 
@@ -49,16 +50,35 @@ jobs:
           fi
 
           PORT="${DEPLOY_PORT:-22}"
-          SSH_OPTS="-6 -p ${PORT} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+          SSH_FAMILY="${DEPLOY_SSH_FAMILY:-}"
+          SCP_HOST="${DEPLOY_HOST}"
+
+          if [ -z "${SSH_FAMILY}" ]; then
+            case "${DEPLOY_HOST}" in
+              *:*)
+                SSH_FAMILY="-6"
+                SCP_HOST="[${DEPLOY_HOST}]"
+                ;;
+              *)
+                SSH_FAMILY="-4"
+                ;;
+            esac
+          elif [ "${SSH_FAMILY}" = "-6" ]; then
+            SCP_HOST="[${DEPLOY_HOST}]"
+          fi
+
+          SSH_OPTS="${SSH_FAMILY} -p ${PORT} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
 
           sshpass -e ssh ${SSH_OPTS} "${DEPLOY_USER}@${DEPLOY_HOST}" 'mkdir -p /opt/site-dashboard'
-          sshpass -e scp -6 -P "${PORT}" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
-            /tmp/site-dashboard.tar.gz "${DEPLOY_USER}@[${DEPLOY_HOST}]:/tmp/site-dashboard.tar.gz"
+          sshpass -e scp ${SSH_FAMILY} -P "${PORT}" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+            /tmp/site-dashboard.tar.gz "${DEPLOY_USER}@${SCP_HOST}:/tmp/site-dashboard.tar.gz"
 
           sshpass -e ssh ${SSH_OPTS} "${DEPLOY_USER}@${DEPLOY_HOST}" 'bash -s' <<'REMOTE'
           set -euo pipefail
 
           mkdir -p /opt/site-dashboard /var/lib/site-dashboard
+          rm -rf /opt/site-dashboard/static
+          rm -f /opt/site-dashboard/app.py /opt/site-dashboard/README.md /opt/site-dashboard/.gitignore
           tar -xzf /tmp/site-dashboard.tar.gz -C /opt/site-dashboard
           rm -f /tmp/site-dashboard.tar.gz
 
@@ -66,6 +86,16 @@ jobs:
             apt-get update
             apt-get install -y python3
           fi
+
+          if ! id -u site-dashboard >/dev/null 2>&1; then
+            useradd --system --home-dir /opt/site-dashboard --shell /usr/sbin/nologin site-dashboard
+          fi
+
+          find /opt/site-dashboard -type d -exec chmod 755 {} \;
+          find /opt/site-dashboard -type f -exec chmod 644 {} \;
+          chown -R root:root /opt/site-dashboard
+          chown -R site-dashboard:site-dashboard /var/lib/site-dashboard
+          chmod 750 /var/lib/site-dashboard
 
           cat >/etc/systemd/system/site-dashboard.service <<'UNIT'
           [Unit]
@@ -75,11 +105,14 @@ jobs:
 
           [Service]
           Type=simple
+          User=site-dashboard
+          Group=site-dashboard
           WorkingDirectory=/opt/site-dashboard
           Environment=DASHBOARD_HOST=0.0.0.0
           Environment=DASHBOARD_PORT=8000
           Environment=DASHBOARD_DB=/var/lib/site-dashboard/monitor.db
           Environment=CHECK_INTERVAL_SECONDS=600
+          Environment=SESSION_TTL_HOURS=12
           ExecStart=/usr/bin/python3 /opt/site-dashboard/app.py
           Restart=always
           RestartSec=5
